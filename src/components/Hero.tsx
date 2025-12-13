@@ -24,14 +24,13 @@ const Hero = () => {
           {/* Main heading */}
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary via-secondary to-accent">
-              CityCare
+              TapKind
             </span>
-            <span className="text-foreground">Connect</span>
           </h1>
 
           {/* Subheading */}
           <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Tip anonymously and support your community. Every act of kindness creates ripples of positive change across our cities.
+            The cashless kindness ecosystem. Scan, tip, volunteer, and make every act of generosity measurable and fun.
           </p>
 
           {/* CTA Buttons */}
@@ -39,16 +38,18 @@ const Hero = () => {
             <Button 
               size="lg" 
               className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-all shadow-lg hover:shadow-xl text-lg px-8 group"
+              onClick={() => window.location.href = "/scan"}
             >
               <QrCode className="mr-2 h-5 w-5 group-hover:scale-110 transition-transform" />
-              Scan QR Code
+              Scan & Tip
             </Button>
             <Button 
               size="lg" 
               variant="outline"
               className="border-2 border-primary/20 hover:bg-primary/5 text-lg px-8"
+              onClick={() => window.location.href = "/auth"}
             >
-              Enter TipID
+              Get Started
             </Button>
           </div>
 

@@ -84,7 +84,7 @@ const Auth = () => {
         } else {
           toast({
             title: "Account created!",
-            description: "Welcome to CityCareConnect. Let's set up your profile.",
+            description: "Welcome to TapKind. Let's set up your profile.",
           });
           navigate("/profile");
         }
@@ -118,7 +118,7 @@ const Auth = () => {
               <Heart className="h-6 w-6 text-white" />
             </div>
             <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
-              CityCareConnect
+              TapKind
             </span>
           </div>
           <p className="text-muted-foreground">

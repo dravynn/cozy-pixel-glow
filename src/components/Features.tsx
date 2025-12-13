@@ -3,38 +3,38 @@ import { QrCode, Heart, Gift, Shield, Globe, Sparkles } from "lucide-react";
 const features = [
   {
     icon: QrCode,
-    title: "Instant QR Scanning",
-    description: "Simply scan a QR code to tip service workers in seconds. No apps to download, no accounts needed.",
+    title: "Instant Cashless Tipping",
+    description: "Scan QR codes or enter TipIDs to instantly tip artists, musicians, and community members. No cash needed.",
     gradient: "from-primary to-secondary",
   },
   {
-    icon: Shield,
-    title: "100% Anonymous",
-    description: "Your identity stays private. Support your community without revealing personal information.",
+    icon: Heart,
+    title: "Volunteer Integration",
+    description: "Partner with Guaranteed Karma to combine volunteering with digital giving. Earn Karma Points for every hour.",
     gradient: "from-secondary to-accent",
   },
   {
-    icon: Gift,
-    title: "Earn Rewards",
-    description: "Every tip you give earns you rewards. The more you contribute, the more you unlock.",
+    icon: Sparkles,
+    title: "Gamification & Rewards",
+    description: "Earn Kindness Points, unlock badges, and climb leaderboards. Make generosity fun and measurable.",
     gradient: "from-accent to-primary",
   },
   {
-    icon: Globe,
-    title: "Global Network",
-    description: "Connected across 850+ cities worldwide. Your kindness travels beyond borders.",
+    icon: Gift,
+    title: "TapKind Jr. for Kids",
+    description: "Teach children empathy through supervised missions, creative activities, and parent-matched giving.",
     gradient: "from-primary to-accent",
   },
   {
-    icon: Heart,
-    title: "Community Impact",
-    description: "See real-time impact of your contributions. Watch communities thrive together.",
+    icon: Globe,
+    title: "Impact Dashboard",
+    description: "See your collective impact in real-time. Track volunteer hours, tips, and the Global Karma Index.",
     gradient: "from-secondary to-primary",
   },
   {
-    icon: Sparkles,
-    title: "Seamless Experience",
-    description: "Beautiful, intuitive design that makes giving back feel natural and joyful.",
+    icon: Shield,
+    title: "Privacy First",
+    description: "Minimal PII, encrypted data, and anonymous tipping options. Your kindness, your privacy.",
     gradient: "from-accent to-secondary",
   },
 ];
@@ -47,11 +47,11 @@ const Features = () => {
           <h2 className="text-4xl md:text-5xl font-bold mb-4">
             Why People Love{" "}
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
-              CityCareConnect
+              TapKind
             </span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            More than just tipping—it's about building connections and nurturing communities
+            More than just tipping—it's a complete kindness ecosystem with volunteering, gamification, and impact tracking
           </p>
         </div>
 

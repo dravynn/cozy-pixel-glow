@@ -25,13 +25,14 @@ const CTA = () => {
             </h2>
 
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Join thousands of community members who are creating positive change, one tip at a time.
+              Join thousands making kindness their superpower. Scan, tip, volunteer, and see your impact grow.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
               <Button 
                 size="lg" 
                 className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-all shadow-lg hover:shadow-xl text-lg px-8 group"
+                onClick={() => window.location.href = "/auth"}
               >
                 Get Started Now
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
@@ -40,8 +41,9 @@ const CTA = () => {
                 size="lg" 
                 variant="outline"
                 className="border-2 border-primary/20 hover:bg-primary/5 text-lg px-8"
+                onClick={() => window.location.href = "/scan"}
               >
-                Learn More
+                Try Scanning
               </Button>
             </div>
 

@@ -30,7 +30,7 @@ const Navbar = () => {
               <Heart className="h-5 w-5 text-white" />
             </div>
             <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary hidden sm:block">
-              CityCareConnect
+              TapKind
             </span>
           </Link>
 
@@ -39,12 +39,19 @@ const Navbar = () => {
             <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
               Home
             </Link>
-            <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
-              Features
-            </a>
-            <a href="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">
-              How It Works
-            </a>
+            {user && (
+              <>
+                <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Dashboard
+                </Link>
+                <Link to="/scan" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Scan & Tip
+                </Link>
+                <Link to="/leaderboard" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Leaderboard
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Auth Buttons */}
@@ -96,7 +103,7 @@ const Navbar = () => {
 
         {/* Mobile Menu */}
         {isOpen && (
-          <div className="md:hidden py-4 border-t border-border animate-fade-in">
+            <div className="md:hidden py-4 border-t border-border animate-fade-in">
             <div className="flex flex-col gap-4">
               <Link
                 to="/"
@@ -105,20 +112,31 @@ const Navbar = () => {
               >
                 Home
               </Link>
-              <a
-                href="#features"
-                onClick={() => setIsOpen(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Features
-              </a>
-              <a
-                href="#how-it-works"
-                onClick={() => setIsOpen(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                How It Works
-              </a>
+              {user && (
+                <>
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setIsOpen(false)}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Dashboard
+                  </Link>
+                  <Link
+                    to="/scan"
+                    onClick={() => setIsOpen(false)}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Scan & Tip
+                  </Link>
+                  <Link
+                    to="/leaderboard"
+                    onClick={() => setIsOpen(false)}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Leaderboard
+                  </Link>
+                </>
+              )}
               <div className="pt-4 border-t border-border flex flex-col gap-2">
                 {user ? (
                   <>
