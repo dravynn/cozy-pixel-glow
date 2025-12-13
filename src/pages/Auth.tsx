@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Heart, Mail, Lock, User, ArrowRight } from "lucide-react";
+import { Heart, Mail, Lock, User, ArrowRight, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 
@@ -18,8 +18,11 @@ const Auth = () => {
   const [displayName, setDisplayName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [showResendConfirmation, setShowResendConfirmation] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [isResending, setIsResending] = useState(false);
   
-  const { signIn, signUp, user, loading } = useAuth();
+  const { signIn, signUp, user, loading, resendConfirmationEmail } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -57,14 +60,29 @@ const Auth = () => {
       if (isLogin) {
         const { error } = await signIn(email, password);
         if (error) {
+          console.error('Login error details:', error);
+          let errorMessage = "Login failed. Please try again.";
+          
+          if (error.message) {
+            if (error.message.includes("Invalid login credentials") || error.message.includes("Invalid credentials")) {
+              errorMessage = "Incorrect email or password. Please try again.";
+            } else if (error.message.includes("Email not confirmed")) {
+              errorMessage = "Please check your email and confirm your account before signing in.";
+              setShowResendConfirmation(true);
+              setPendingEmail(email);
+            } else {
+              errorMessage = error.message;
+            }
+          }
+          
           toast({
             title: "Login failed",
-            description: error.message === "Invalid login credentials" 
-              ? "Incorrect email or password. Please try again."
-              : error.message,
+            description: errorMessage,
             variant: "destructive",
           });
         } else {
+          setShowResendConfirmation(false);
+          setPendingEmail("");
           toast({
             title: "Welcome back!",
             description: "You've successfully logged in.",
@@ -84,9 +102,14 @@ const Auth = () => {
         } else {
           toast({
             title: "Account created!",
-            description: "Welcome to TapKind. Let's set up your profile.",
+            description: "Please check your email to confirm your account before signing in.",
           });
-          navigate("/profile");
+          // Switch to login mode after successful signup
+          setIsLogin(true);
+          setEmail(email);
+          setPassword("");
+          setShowResendConfirmation(true);
+          setPendingEmail(email);
         }
       }
     } finally {
@@ -200,12 +223,55 @@ const Auth = () => {
             </Button>
           </form>
 
+          {showResendConfirmation && (
+            <div className="mt-4 p-4 bg-muted/50 border border-border rounded-xl">
+              <p className="text-sm text-muted-foreground mb-3">
+                Didn't receive the confirmation email?
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isResending}
+                onClick={async () => {
+                  setIsResending(true);
+                  const { error } = await resendConfirmationEmail(pendingEmail);
+                  if (error) {
+                    toast({
+                      title: "Failed to resend email",
+                      description: error.message || "Please try again later.",
+                      variant: "destructive",
+                    });
+                  } else {
+                    toast({
+                      title: "Confirmation email sent!",
+                      description: "Please check your inbox and click the confirmation link.",
+                    });
+                  }
+                  setIsResending(false);
+                }}
+                className="w-full"
+              >
+                {isResending ? (
+                  "Sending..."
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Resend Confirmation Email
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
           <div className="mt-6 text-center">
             <button
               type="button"
               onClick={() => {
                 setIsLogin(!isLogin);
                 setErrors({});
+                setShowResendConfirmation(false);
+                setPendingEmail("");
               }}
               className="text-muted-foreground hover:text-primary transition-colors"
             >
