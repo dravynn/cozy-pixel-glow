@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,42 +15,55 @@ import {
   MapPin,
   Heart,
   DollarSign,
-  Sparkles
+  Sparkles,
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+interface RecipientProfile {
+  id: string;
+  user_id: string;
+  display_name: string | null;
+  bio: string | null;
+  location: string | null;
+  tags: string[];
+  avatar_url: string | null;
+  totalTips: number;
+  tipCount: number;
+}
+
 const Scan = () => {
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [tipId, setTipId] = useState("");
-  const [recipient, setRecipient] = useState<any>(null);
+  const [recipient, setRecipient] = useState<RecipientProfile | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [tipAmount, setTipAmount] = useState("");
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
 
   const handleScan = () => {
     setIsScanning(true);
-    // Simulate QR scan
+    // TODO: Implement actual QR code scanning with camera API
+    // For now, this is a placeholder
     setTimeout(() => {
       setIsScanning(false);
-      // Mock recipient data
-      setRecipient({
-        id: "rec_123",
-        name: "Sarah Martinez",
-        bio: "Street musician bringing joy to the city",
-        location: "Central Park, NYC",
-        tags: ["Musician", "Artist"],
-        totalTips: 1240,
-        tipCount: 47,
-        avatar: null
-      });
       toast({
-        title: "QR Code scanned!",
-        description: "Found recipient profile",
+        title: "QR Scanner",
+        description: "QR code scanning will be implemented with camera API",
+        variant: "default",
       });
     }, 1500);
   };
 
-  const handleTipIdSearch = () => {
+  const handleTipIdSearch = async () => {
     if (!tipId.trim()) {
       toast({
         title: "Enter a TipID",
@@ -57,25 +72,115 @@ const Scan = () => {
       });
       return;
     }
-    
-    // Mock search
-    setRecipient({
-      id: "rec_456",
-      name: "Alex Chen",
-      bio: "Community artist creating public murals",
-      location: "Brooklyn, NYC",
-      tags: ["Artist", "Community"],
-      totalTips: 890,
-      tipCount: 32,
-      avatar: null
-    });
-    toast({
-      title: "Recipient found!",
-      description: "Ready to tip",
-    });
+
+    if (!user) {
+      toast({
+        title: "Not authenticated",
+        description: "Please log in to search for recipients",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSearching(true);
+    setRecipient(null);
+
+    try {
+      // Search for recipient code
+      const { data: recipientCode, error: codeError } = await supabase
+        .from("recipient_codes")
+        .select("user_id")
+        .eq("tip_id", tipId.trim().toUpperCase())
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (codeError) throw codeError;
+
+      if (!recipientCode) {
+        toast({
+          title: "TipID not found",
+          description: "No active recipient found with this TipID",
+          variant: "destructive",
+        });
+        setIsSearching(false);
+        return;
+      }
+
+      // Get recipient profile
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", recipientCode.user_id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      if (!profile) {
+        toast({
+          title: "Profile not found",
+          description: "Recipient profile could not be loaded",
+          variant: "destructive",
+        });
+        setIsSearching(false);
+        return;
+      }
+
+      // Get tip statistics
+      const { data: tips, error: tipsError } = await supabase
+        .from("tips")
+        .select("amount")
+        .eq("recipient_id", recipientCode.user_id);
+
+      if (tipsError) throw tipsError;
+
+      const totalTips = tips?.reduce((sum, tip) => sum + parseFloat(tip.amount.toString()), 0) || 0;
+      const tipCount = tips?.length || 0;
+
+      setRecipient({
+        id: profile.id,
+        user_id: profile.user_id,
+        display_name: profile.display_name,
+        bio: profile.bio,
+        location: profile.location,
+        tags: profile.tags || [],
+        avatar_url: profile.avatar_url,
+        totalTips,
+        tipCount,
+      });
+
+      toast({
+        title: "Recipient found!",
+        description: "Ready to tip",
+      });
+    } catch (error: any) {
+      console.error("Error searching for recipient:", error);
+      
+      const errorMessage = error.message || '';
+      const isTableMissing = error.code === 'PGRST116' || 
+                            errorMessage.includes('relation') || 
+                            errorMessage.includes('does not exist') ||
+                            errorMessage.includes('404') ||
+                            error.code === '42P01';
+      
+      if (isTableMissing) {
+        toast({
+          title: "Database Migration Required",
+          description: "Please run the database migration first. Check supabase/migrations/",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Search failed",
+          description: error.message || "Failed to search for recipient",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsSearching(false);
+    }
   };
 
-  const handleTip = () => {
+  const handleTip = async () => {
     if (!tipAmount || parseFloat(tipAmount) <= 0) {
       toast({
         title: "Invalid amount",
@@ -85,19 +190,65 @@ const Scan = () => {
       return;
     }
 
-    // Mock tip processing
-    toast({
-      title: "Tip sent! 🎉",
-      description: `You've sent $${tipAmount} to ${recipient.name}`,
-    });
-    
-    setTimeout(() => {
-      setRecipient(null);
-      setTipAmount("");
-      setTipId("");
-      navigate("/dashboard");
-    }, 2000);
+    if (!user || !recipient) {
+      toast({
+        title: "Error",
+        description: "Missing user or recipient information",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const amount = parseFloat(tipAmount);
+
+      // Create tip record
+      const { data: tip, error: tipError } = await supabase
+        .from("tips")
+        .insert({
+          giver_id: user.id,
+          recipient_id: recipient.user_id,
+          amount: amount,
+          is_anonymous: false,
+        })
+        .select()
+        .single();
+
+      if (tipError) throw tipError;
+
+      toast({
+        title: "Tip sent! 🎉",
+        description: `You've sent $${amount.toFixed(2)} to ${recipient.display_name || "recipient"}`,
+      });
+
+      // Reset form and navigate
+      setTimeout(() => {
+        setRecipient(null);
+        setTipAmount("");
+        setTipId("");
+        navigate("/dashboard");
+      }, 2000);
+    } catch (error: any) {
+      console.error("Error processing tip:", error);
+      toast({
+        title: "Tip failed",
+        description: error.message || "Failed to process tip. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-pulse text-primary">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background">
@@ -150,7 +301,14 @@ const Scan = () => {
                   className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
                   size="lg"
                 >
-                  {isScanning ? "Scanning..." : "Start Scanning"}
+                  {isScanning ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Scanning...
+                    </>
+                  ) : (
+                    "Start Scanning"
+                  )}
                 </Button>
               </CardContent>
             </Card>
@@ -176,9 +334,17 @@ const Scan = () => {
                   </div>
                   <Button 
                     onClick={handleTipIdSearch}
+                    disabled={isSearching}
                     className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
                   >
-                    Search
+                    {isSearching ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Searching...
+                      </>
+                    ) : (
+                      "Search"
+                    )}
                   </Button>
                 </div>
               </CardContent>
@@ -196,25 +362,39 @@ const Scan = () => {
             <CardContent className="space-y-6">
               {/* Profile Info */}
               <div className="flex items-start gap-4">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-2xl font-bold text-white">
-                  {recipient.name[0]}
-                </div>
+                {recipient.avatar_url ? (
+                  <img
+                    src={recipient.avatar_url}
+                    alt={recipient.display_name || "Recipient"}
+                    className="w-20 h-20 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-2xl font-bold text-white">
+                    {(recipient.display_name || "R")[0].toUpperCase()}
+                  </div>
+                )}
                 <div className="flex-1 space-y-2">
                   <div>
-                    <h3 className="text-xl font-semibold">{recipient.name}</h3>
-                    <p className="text-sm text-muted-foreground">{recipient.bio}</p>
+                    <h3 className="text-xl font-semibold">{recipient.display_name || "Anonymous"}</h3>
+                    {recipient.bio && (
+                      <p className="text-sm text-muted-foreground">{recipient.bio}</p>
+                    )}
                   </div>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <MapPin className="h-4 w-4" />
-                      {recipient.location}
+                  {recipient.location && (
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="h-4 w-4" />
+                        {recipient.location}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {recipient.tags.map((tag: string) => (
-                      <Badge key={tag} variant="secondary">{tag}</Badge>
-                    ))}
-                  </div>
+                  )}
+                  {recipient.tags && recipient.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {recipient.tags.map((tag: string) => (
+                        <Badge key={tag} variant="secondary">{tag}</Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -261,17 +441,26 @@ const Scan = () => {
               {/* Action */}
               <Button
                 onClick={handleTip}
-                disabled={!tipAmount || parseFloat(tipAmount) <= 0}
+                disabled={!tipAmount || parseFloat(tipAmount) <= 0 || isProcessing}
                 className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
                 size="lg"
               >
-                <Heart className="mr-2 h-5 w-5" />
-                Send ${tipAmount || "0"} Tip
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Heart className="mr-2 h-5 w-5" />
+                    Send ${tipAmount || "0"} Tip
+                  </>
+                )}
               </Button>
 
               <p className="text-xs text-center text-muted-foreground">
                 <Sparkles className="inline h-3 w-3 mr-1" />
-                You'll earn {Math.floor(parseFloat(tipAmount || "0") * 2)} Kindness Points
+                You'll earn {Math.floor(parseFloat(tipAmount || "0") * 10)} Kindness Points
               </p>
             </CardContent>
           </Card>

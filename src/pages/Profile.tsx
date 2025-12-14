@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Plus, X, MapPin, Camera } from "lucide-react";
+import { ArrowLeft, Save, Plus, X, MapPin, Camera, QrCode, Copy, Check } from "lucide-react";
 
 interface Profile {
   id: string;
@@ -32,6 +33,9 @@ const Profile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [newTag, setNewTag] = useState("");
+  const [recipientCode, setRecipientCode] = useState<{ tip_id: string; is_active: boolean } | null>(null);
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -42,6 +46,7 @@ const Profile = () => {
   useEffect(() => {
     if (user) {
       fetchProfile();
+      fetchRecipientCode();
     }
   }, [user]);
 
@@ -69,6 +74,128 @@ const Profile = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchRecipientCode = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("recipient_codes")
+        .select("tip_id, is_active")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setRecipientCode(data);
+      }
+    } catch (error) {
+      console.error("Error fetching recipient code:", error);
+    }
+  };
+
+  const generateTipId = () => {
+    // Generate a unique TipID: TK-XXXXXX format
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let tipId = 'TK-';
+    for (let i = 0; i < 6; i++) {
+      tipId += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return tipId;
+  };
+
+  const handleGenerateCode = async () => {
+    if (!user) return;
+
+    setIsGeneratingCode(true);
+    try {
+      // Check if code already exists
+      if (recipientCode) {
+        // Reactivate existing code
+        const { error } = await supabase
+          .from("recipient_codes")
+          .update({ is_active: true })
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+
+        toast({
+          title: "TipID reactivated!",
+          description: "Your TipID is now active and ready to receive tips.",
+        });
+        fetchRecipientCode();
+      } else {
+        // Generate new code
+        const tipId = generateTipId();
+
+        const { error } = await supabase
+          .from("recipient_codes")
+          .insert({
+            user_id: user.id,
+            tip_id: tipId,
+            is_active: true,
+          });
+
+        if (error) throw error;
+
+        toast({
+          title: "TipID created!",
+          description: "Your TipID has been generated. Share it to receive tips!",
+        });
+        fetchRecipientCode();
+      }
+    } catch (error: any) {
+      console.error("Error generating code:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate TipID",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingCode(false);
+    }
+  };
+
+  const handleCopyTipId = () => {
+    if (recipientCode?.tip_id) {
+      navigator.clipboard.writeText(recipientCode.tip_id);
+      setCopied(true);
+      toast({
+        title: "Copied!",
+        description: "TipID copied to clipboard",
+      });
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleToggleCode = async (isActive: boolean) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from("recipient_codes")
+        .update({ is_active: isActive })
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: isActive ? "TipID activated" : "TipID deactivated",
+        description: isActive 
+          ? "Your TipID is now active" 
+          : "Your TipID is now inactive",
+      });
+      fetchRecipientCode();
+    } catch (error: any) {
+      console.error("Error toggling code:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update TipID status",
+        variant: "destructive",
+      });
     }
   };
 
@@ -281,6 +408,84 @@ const Profile = () => {
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
+          </section>
+
+          {/* TipID / QR Code */}
+          <section className="space-y-4">
+            <h2 className="text-xl font-semibold text-foreground">Your TipID</h2>
+            <p className="text-sm text-muted-foreground">
+              Generate a TipID that others can use to send you tips. Share it or create a QR code.
+            </p>
+            
+            {recipientCode ? (
+              <Card className="border-2 border-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <QrCode className="h-5 w-5 text-primary" />
+                    Your TipID
+                  </CardTitle>
+                  <CardDescription>
+                    Share this TipID with others so they can tip you
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-2 p-4 bg-muted/50 rounded-xl">
+                    <code className="flex-1 text-2xl font-bold text-primary font-mono">
+                      {recipientCode.tip_id}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleCopyTipId}
+                      className="h-10 w-10"
+                    >
+                      {copied ? (
+                        <Check className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Badge variant={recipientCode.is_active ? "default" : "secondary"}>
+                      {recipientCode.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleToggleCode(!recipientCode.is_active)}
+                    >
+                      {recipientCode.is_active ? "Deactivate" : "Activate"}
+                    </Button>
+                  </div>
+
+                  <div className="p-4 bg-muted/30 rounded-xl text-center">
+                    <QrCode className="h-24 w-24 text-muted-foreground mx-auto mb-2 opacity-50" />
+                    <p className="text-sm text-muted-foreground">
+                      QR code generation coming soon
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-2 border-dashed">
+                <CardContent className="p-8 text-center">
+                  <QrCode className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="font-semibold mb-2">No TipID yet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Generate a TipID to start receiving tips from others
+                  </p>
+                  <Button
+                    onClick={handleGenerateCode}
+                    disabled={isGeneratingCode}
+                    className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
+                  >
+                    {isGeneratingCode ? "Generating..." : "Generate TipID"}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </section>
 
           {/* Visibility */}

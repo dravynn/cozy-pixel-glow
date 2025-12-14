@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   ArrowLeft, 
   Heart,
@@ -14,100 +19,185 @@ import {
   CheckCircle2,
   Sparkles,
   Search,
-  QrCode
+  QrCode,
+  Plus,
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-interface Event {
+interface VolunteerCheckin {
   id: string;
-  name: string;
-  organization: string;
-  location: string;
-  date: string;
-  time: string;
-  duration: string;
-  attendees: number;
-  karmaPoints: number;
-  description: string;
-  status: "upcoming" | "active" | "past";
+  event_name: string;
+  event_location: string | null;
+  hours: number;
+  check_in_time: string;
+  notes: string | null;
+  created_at: string;
 }
 
 const Volunteer = () => {
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [checkins, setCheckins] = useState<VolunteerCheckin[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  // Form state
+  const [eventName, setEventName] = useState("");
+  const [eventLocation, setEventLocation] = useState("");
+  const [hours, setHours] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const events: Event[] = [
-    {
-      id: "1",
-      name: "Central Park Cleanup",
-      organization: "Guaranteed Karma",
-      location: "Central Park, NYC",
-      date: "2024-12-20",
-      time: "10:00 AM",
-      duration: "3 hours",
-      attendees: 45,
-      karmaPoints: 100,
-      description: "Join us for a community cleanup event. We'll be removing litter and beautifying the park.",
-      status: "upcoming"
-    },
-    {
-      id: "2",
-      name: "Street Art Festival",
-      organization: "Guaranteed Karma",
-      location: "Brooklyn Bridge Park",
-      date: "2024-12-22",
-      time: "2:00 PM",
-      duration: "4 hours",
-      attendees: 120,
-      karmaPoints: 150,
-      description: "Support local artists and help set up the festival. Great opportunity to meet the community!",
-      status: "upcoming"
-    },
-    {
-      id: "3",
-      name: "Community Garden Planting",
-      organization: "Guaranteed Karma",
-      location: "Prospect Park",
-      date: "2024-12-18",
-      time: "9:00 AM",
-      duration: "2 hours",
-      attendees: 28,
-      karmaPoints: 75,
-      description: "Help plant seasonal vegetables and flowers in our community garden.",
-      status: "active"
-    },
-  ];
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
 
-  const pastEvents: Event[] = [
-    {
-      id: "4",
-      name: "Beach Cleanup",
-      organization: "Guaranteed Karma",
-      location: "Coney Island",
-      date: "2024-12-10",
-      time: "8:00 AM",
-      duration: "3 hours",
-      attendees: 67,
-      karmaPoints: 100,
-      description: "Cleaned up the beach and collected over 200 lbs of trash.",
-      status: "past"
-    },
-  ];
+  useEffect(() => {
+    if (user) {
+      fetchCheckins();
+    }
+  }, [user]);
 
-  const handleCheckIn = (event: Event) => {
-    toast({
-      title: "Checked in! 🎉",
-      description: `You've checked in to ${event.name}. Earn ${event.karmaPoints} Karma Points!`,
-    });
-    // In real app, this would update the event status and user's karma points
+  const fetchCheckins = async () => {
+    if (!user) return;
+
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("volunteer_checkins")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      setCheckins(data || []);
+    } catch (error: any) {
+      console.error("Error fetching check-ins:", error);
+      
+      const errorMessage = error.message || '';
+      const isTableMissing = error.code === 'PGRST116' || 
+                            errorMessage.includes('relation') || 
+                            errorMessage.includes('does not exist') ||
+                            errorMessage.includes('404') ||
+                            error.code === '42P01';
+      
+      if (isTableMissing) {
+        toast({
+          title: "Database Migration Required",
+          description: "Please run the database migration first. Check supabase/migrations/",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load volunteer check-ins",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const filteredEvents = events.filter(event =>
-    event.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    event.location.toLowerCase().includes(searchQuery.toLowerCase())
+  const handleCheckIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!user) {
+      toast({
+        title: "Not authenticated",
+        description: "Please log in to check in",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!eventName.trim()) {
+      toast({
+        title: "Event name required",
+        description: "Please enter an event name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const hoursNum = parseFloat(hours);
+    if (!hours || hoursNum <= 0) {
+      toast({
+        title: "Invalid hours",
+        description: "Please enter a valid number of hours",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from("volunteer_checkins")
+        .insert({
+          user_id: user.id,
+          event_name: eventName.trim(),
+          event_location: eventLocation.trim() || null,
+          hours: hoursNum,
+          notes: notes.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const pointsEarned = Math.floor(hoursNum * 50); // 50 points per hour
+
+      toast({
+        title: "Checked in! 🎉",
+        description: `You've checked in to ${eventName}. Earned ${pointsEarned} Karma Points!`,
+      });
+
+      // Reset form
+      setEventName("");
+      setEventLocation("");
+      setHours("");
+      setNotes("");
+      setIsDialogOpen(false);
+
+      // Refresh check-ins
+      fetchCheckins();
+    } catch (error: any) {
+      console.error("Error checking in:", error);
+      toast({
+        title: "Check-in failed",
+        description: error.message || "Failed to check in. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const totalHours = checkins.reduce((sum, checkin) => sum + parseFloat(checkin.hours.toString()), 0);
+  const totalPoints = Math.floor(totalHours * 50);
+
+  const filteredCheckins = checkins.filter(checkin =>
+    checkin.event_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (checkin.event_location && checkin.event_location.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  if (authLoading || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading volunteer events...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background">
@@ -131,175 +221,220 @@ const Volunteer = () => {
           <p className="text-muted-foreground">Join community events and earn Karma Points</p>
         </div>
 
-        {/* Search */}
-        <div className="mb-6">
-          <div className="relative max-w-md">
+        {/* Stats Summary */}
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Hours</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                <div className="text-3xl font-bold">{totalHours.toFixed(1)}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Points</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-secondary" />
+                <div className="text-3xl font-bold">{totalPoints.toLocaleString()}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Events Attended</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Heart className="h-5 w-5 text-accent" />
+                <div className="text-3xl font-bold">{checkins.length}</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Action Bar */}
+        <div className="mb-6 flex items-center justify-between">
+          <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
-              placeholder="Search events by name or location..."
+              placeholder="Search check-ins by event name or location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 h-12"
             />
           </div>
-        </div>
-
-        {/* Upcoming Events */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Upcoming Events</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            {filteredEvents.map((event) => (
-              <Card 
-                key={event.id}
-                className={`hover:shadow-lg transition-all cursor-pointer ${
-                  event.status === "active" ? "border-2 border-primary/30 bg-primary/5" : ""
-                }`}
-                onClick={() => setSelectedEvent(event)}
-              >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="mb-2">{event.name}</CardTitle>
-                      <CardDescription className="flex items-center gap-1 mb-3">
-                        <Heart className="h-4 w-4 text-secondary" />
-                        {event.organization}
-                      </CardDescription>
-                    </div>
-                    {event.status === "active" && (
-                      <Badge className="bg-primary text-white">Active Now</Badge>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
-                      {event.location}
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      {event.date}
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Clock className="h-4 w-4" />
-                      {event.time} • {event.duration}
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Users className="h-4 w-4" />
-                      {event.attendees} attending
-                    </div>
-                  </div>
-                  <div className="pt-4 border-t border-border">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-secondary" />
-                        <span className="font-semibold">{event.karmaPoints} Karma Points</span>
-                      </div>
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCheckIn(event);
-                        }}
-                        className="bg-gradient-to-r from-secondary to-accent hover:opacity-90 text-white"
-                        size="sm"
-                      >
-                        <QrCode className="h-4 w-4 mr-2" />
-                        Check In
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Past Events */}
-        <div>
-          <h2 className="text-2xl font-semibold mb-4">Your Past Events</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            {pastEvents.map((event) => (
-              <Card key={event.id} className="opacity-75">
-                <CardHeader>
-                  <CardTitle className="mb-2">{event.name}</CardTitle>
-                  <CardDescription className="flex items-center gap-1">
-                    <Heart className="h-4 w-4 text-secondary" />
-                    {event.organization}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
-                      {event.location}
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      {event.date}
-                    </div>
-                  </div>
-                  <div className="pt-4 border-t border-border flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-medium">Completed</span>
-                    </div>
-                    <Badge variant="secondary">
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      {event.karmaPoints} pts earned
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Event Detail Modal (simplified - would be a proper dialog in production) */}
-        {selectedEvent && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setSelectedEvent(null)}>
-            <Card className="max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
-              <CardHeader>
-                <CardTitle>{selectedEvent.name}</CardTitle>
-                <CardDescription>{selectedEvent.organization}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-muted-foreground">{selectedEvent.description}</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Location</div>
-                    <div className="font-medium">{selectedEvent.location}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Date & Time</div>
-                    <div className="font-medium">{selectedEvent.date} at {selectedEvent.time}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Duration</div>
-                    <div className="font-medium">{selectedEvent.duration}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Karma Points</div>
-                    <div className="font-medium text-secondary">{selectedEvent.karmaPoints} pts</div>
-                  </div>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-gradient-to-r from-secondary to-accent hover:opacity-90 text-white">
+                <Plus className="h-4 w-4 mr-2" />
+                New Check-In
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Check In to Volunteer Event</DialogTitle>
+                <DialogDescription>
+                  Record your volunteer hours to earn Karma Points (50 points per hour)
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCheckIn} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="eventName">Event Name *</Label>
+                  <Input
+                    id="eventName"
+                    value={eventName}
+                    onChange={(e) => setEventName(e.target.value)}
+                    placeholder="e.g., Central Park Cleanup"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="eventLocation">Location</Label>
+                  <Input
+                    id="eventLocation"
+                    value={eventLocation}
+                    onChange={(e) => setEventLocation(e.target.value)}
+                    placeholder="e.g., Central Park, NYC"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hours">Hours Volunteered *</Label>
+                  <Input
+                    id="hours"
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    value={hours}
+                    onChange={(e) => setHours(e.target.value)}
+                    placeholder="e.g., 3.5"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    You'll earn {hours ? Math.floor(parseFloat(hours || "0") * 50) : 0} Karma Points
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes (optional)</Label>
+                  <Textarea
+                    id="notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Any additional details about your volunteer work..."
+                    rows={3}
+                  />
                 </div>
                 <div className="flex gap-2 pt-4">
                   <Button
-                    onClick={() => {
-                      handleCheckIn(selectedEvent);
-                      setSelectedEvent(null);
-                    }}
+                    type="submit"
+                    disabled={isSubmitting}
                     className="flex-1 bg-gradient-to-r from-secondary to-accent hover:opacity-90 text-white"
                   >
-                    Check In Now
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Checking in...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        Check In
+                      </>
+                    )}
                   </Button>
-                  <Button variant="outline" onClick={() => setSelectedEvent(null)}>
-                    Close
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsDialogOpen(false)}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
                   </Button>
                 </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {/* Check-ins List */}
+        <div>
+          <h2 className="text-2xl font-semibold mb-4">Your Volunteer Check-Ins</h2>
+          {filteredCheckins.length > 0 ? (
+            <div className="grid md:grid-cols-2 gap-6">
+              {filteredCheckins.map((checkin) => {
+                const checkInDate = new Date(checkin.check_in_time);
+                const pointsEarned = Math.floor(parseFloat(checkin.hours.toString()) * 50);
+                
+                return (
+                  <Card key={checkin.id}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="mb-2">{checkin.event_name}</CardTitle>
+                          {checkin.event_location && (
+                            <CardDescription className="flex items-center gap-1">
+                              <MapPin className="h-4 w-4" />
+                              {checkin.event_location}
+                            </CardDescription>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Calendar className="h-4 w-4" />
+                          {checkInDate.toLocaleDateString()}
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Clock className="h-4 w-4" />
+                          {checkin.hours} {checkin.hours === 1 ? "hour" : "hours"}
+                        </div>
+                        {checkin.notes && (
+                          <div className="pt-2 text-muted-foreground">
+                            <p className="text-sm">{checkin.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="pt-4 border-t border-border flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-medium">Completed</span>
+                        </div>
+                        <Badge variant="secondary">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          {pointsEarned} pts earned
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <Heart className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                <h3 className="font-semibold mb-2">No check-ins yet</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Start volunteering and check in to earn Karma Points!
+                </p>
+                <Button
+                  onClick={() => setIsDialogOpen(true)}
+                  className="bg-gradient-to-r from-secondary to-accent hover:opacity-90 text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Check In Now
+                </Button>
               </CardContent>
             </Card>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
