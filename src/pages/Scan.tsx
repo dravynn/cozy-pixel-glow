@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { QRScanner } from "@/components/QRScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,22 +50,79 @@ const Scan = () => {
     }
   }, [user, authLoading, navigate]);
 
-  const handleScan = () => {
-    setIsScanning(true);
-    // TODO: Implement actual QR code scanning with camera API
-    // For now, this is a placeholder
-    setTimeout(() => {
-      setIsScanning(false);
-      toast({
-        title: "QR Scanner",
-        description: "QR code scanning will be implemented with camera API",
-        variant: "default",
-      });
-    }, 1500);
+  // Parse QR payload - handles both plain TipID and structured JSON
+  const parseQRPayload = (decodedText: string): string => {
+    try {
+      // Try to parse as JSON (base64 or direct JSON)
+      let data: any;
+      
+      // Check if it's base64 encoded JSON
+      if (decodedText.startsWith('{')) {
+        data = JSON.parse(decodedText);
+      } else {
+        // Try base64 decode
+        try {
+          const decoded = atob(decodedText);
+          if (decoded.startsWith('{')) {
+            data = JSON.parse(decoded);
+          } else {
+            // Not JSON, treat as plain TipID
+            return decodedText.trim().toUpperCase();
+          }
+        } catch {
+          // Not base64, treat as plain TipID
+          return decodedText.trim().toUpperCase();
+        }
+      }
+
+      // Handle structured QR payload
+      if (data.type === "tip" || data.type === "payment") {
+        // Extract TipID from structured payload
+        if (data.tip_id || data.tipId || data.id) {
+          return (data.tip_id || data.tipId || data.id).toString().trim().toUpperCase();
+        }
+      }
+
+      // If it's JSON but doesn't have expected structure, try to find TipID
+      if (data.tip_id || data.tipId) {
+        return (data.tip_id || data.tipId).toString().trim().toUpperCase();
+      }
+
+      // Fallback: return original text
+      return decodedText.trim().toUpperCase();
+    } catch (error) {
+      // Not JSON, treat as plain TipID
+      return decodedText.trim().toUpperCase();
+    }
   };
 
-  const handleTipIdSearch = async () => {
-    if (!tipId.trim()) {
+  const handleQRScan = (decodedText: string) => {
+    setIsScanning(false);
+    
+    // Parse the QR payload
+    const tipId = parseQRPayload(decodedText);
+    
+    if (!tipId) {
+      toast({
+        title: "Invalid QR Code",
+        description: "The scanned QR code doesn't contain a valid TipID",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Set the TipID and trigger search
+    setTipId(tipId);
+    // Automatically search for the recipient
+    setTimeout(() => {
+      handleTipIdSearch(tipId);
+    }, 100);
+  };
+
+  const handleTipIdSearch = async (searchTipId?: string) => {
+    const tipIdToSearch = searchTipId || tipId;
+    
+    if (!tipIdToSearch.trim()) {
       toast({
         title: "Enter a TipID",
         description: "Please enter a valid TipID to search",
@@ -87,10 +145,10 @@ const Scan = () => {
 
     try {
       // Search for recipient code
-      const { data: recipientCode, error: codeError } = await supabase
+      const { data: recipientCode, error: codeError } = await (supabase as any)
         .from("recipient_codes")
         .select("user_id")
-        .eq("tip_id", tipId.trim().toUpperCase())
+        .eq("tip_id", tipIdToSearch.trim().toUpperCase())
         .eq("is_active", true)
         .maybeSingle();
 
@@ -126,7 +184,7 @@ const Scan = () => {
       }
 
       // Get tip statistics
-      const { data: tips, error: tipsError } = await supabase
+      const { data: tips, error: tipsError } = await (supabase as any)
         .from("tips")
         .select("amount")
         .eq("recipient_id", recipientCode.user_id);
@@ -205,7 +263,7 @@ const Scan = () => {
       const amount = parseFloat(tipAmount);
 
       // Create tip record
-      const { data: tip, error: tipError } = await supabase
+      const { data: tip, error: tipError } = await (supabase as any)
         .from("tips")
         .insert({
           giver_id: user.id,
@@ -279,37 +337,45 @@ const Scan = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Scan QR Code</CardTitle>
-                <CardDescription>Point your camera at a recipient's QR code</CardDescription>
+                <CardDescription>Point your camera at a recipient's QR code to find them instantly</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="aspect-square max-w-md mx-auto bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl flex items-center justify-center border-2 border-dashed border-primary/30">
-                  {isScanning ? (
-                    <div className="text-center space-y-4">
-                      <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-                      <p className="text-muted-foreground">Scanning...</p>
+                {!isScanning ? (
+                  <>
+                    <div className="aspect-square max-w-md mx-auto bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl flex items-center justify-center border-2 border-dashed border-primary/30">
+                      <div className="text-center space-y-4">
+                        <QrCode className="h-24 w-24 text-primary/50 mx-auto" />
+                        <p className="text-muted-foreground">Click below to start scanning</p>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="text-center space-y-4">
-                      <QrCode className="h-24 w-24 text-primary/50 mx-auto" />
-                      <p className="text-muted-foreground">Camera will activate when you click scan</p>
-                    </div>
-                  )}
-                </div>
-                <Button 
-                  onClick={handleScan} 
-                  disabled={isScanning}
-                  className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
-                  size="lg"
-                >
-                  {isScanning ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Scanning...
-                    </>
-                  ) : (
-                    "Start Scanning"
-                  )}
-                </Button>
+                    <Button 
+                      onClick={() => setIsScanning(true)} 
+                      className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
+                      size="lg"
+                    >
+                      <QrCode className="mr-2 h-5 w-5" />
+                      Start Scanning
+                    </Button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      Make sure to allow camera access when prompted
+                    </p>
+                  </>
+                ) : (
+                  <div className="space-y-4">
+                    <QRScanner
+                      onScan={handleQRScan}
+                      onClose={() => setIsScanning(false)}
+                      isActive={isScanning}
+                    />
+                    <Button 
+                      onClick={() => setIsScanning(false)} 
+                      variant="outline"
+                      className="w-full"
+                    >
+                      Stop Scanning
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -333,7 +399,7 @@ const Scan = () => {
                     />
                   </div>
                   <Button 
-                    onClick={handleTipIdSearch}
+                    onClick={() => handleTipIdSearch()}
                     disabled={isSearching}
                     className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
                   >

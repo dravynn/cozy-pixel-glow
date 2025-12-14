@@ -160,4 +160,8 @@ All colors MUST be HSL.
   .animate-glow {
     animation: glow 2s ease-in-out infinite;
   }
+
+  .progress-bar {
+    width: var(--progress-width, 0%);
+  }
 }

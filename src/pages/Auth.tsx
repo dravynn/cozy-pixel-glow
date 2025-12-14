@@ -130,7 +130,7 @@ const Auth = () => {
       {/* Background effects */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-float" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-secondary/10 rounded-full blur-3xl animate-float" style={{ animationDelay: "1s" }} />
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-secondary/10 rounded-full blur-3xl animate-float [animation-delay:1s]" />
       </div>
 
       <div className="relative w-full max-w-md">
@@ -150,7 +150,7 @@ const Auth = () => {
         </div>
 
         {/* Form Card */}
-        <div className="bg-card/80 backdrop-blur-xl border border-border rounded-3xl p-8 shadow-2xl animate-fade-in" style={{ animationDelay: "100ms" }}>
+        <div className="bg-card/80 backdrop-blur-xl border border-border rounded-3xl p-8 shadow-2xl animate-fade-in [animation-delay:100ms]">
           <form onSubmit={handleSubmit} className="space-y-6">
             {!isLogin && (
               <div className="space-y-2">

@@ -297,7 +297,11 @@ const Profile = () => {
       <main className="container mx-auto px-4 py-8 max-w-3xl">
         {/* Cover Image */}
         <div className="relative h-48 md:h-64 rounded-3xl bg-gradient-to-r from-primary/20 to-secondary/20 mb-20 overflow-hidden">
-          <button className="absolute bottom-4 right-4 bg-background/80 backdrop-blur-sm rounded-full p-3 hover:bg-background transition-colors">
+          <button 
+            className="absolute bottom-4 right-4 bg-background/80 backdrop-blur-sm rounded-full p-3 hover:bg-background transition-colors"
+            aria-label="Change cover image"
+            title="Change cover image"
+          >
             <Camera className="h-5 w-5 text-foreground" />
           </button>
           
@@ -309,7 +313,11 @@ const Profile = () => {
                   {profile.display_name?.[0]?.toUpperCase() || "?"}
                 </div>
               </div>
-              <button className="absolute bottom-0 right-0 bg-primary rounded-full p-2 hover:bg-primary/90 transition-colors">
+              <button 
+                className="absolute bottom-0 right-0 bg-primary rounded-full p-2 hover:bg-primary/90 transition-colors"
+                aria-label="Change avatar image"
+                title="Change avatar image"
+              >
                 <Camera className="h-4 w-4 text-white" />
               </button>
             </div>
@@ -390,6 +398,8 @@ const Profile = () => {
                   <button
                     onClick={() => removeTag(tag)}
                     className="ml-2 hover:text-destructive transition-colors"
+                    aria-label={`Remove tag ${tag}`}
+                    title={`Remove tag ${tag}`}
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -498,6 +508,7 @@ const Profile = () => {
                 checked={profile.is_public}
                 onChange={(e) => setProfile({ ...profile, is_public: e.target.checked })}
                 className="w-5 h-5 rounded border-border accent-primary"
+                aria-label="Make profile public"
               />
               <Label htmlFor="isPublic" className="flex-1 cursor-pointer">
                 <span className="block font-medium">Make profile public</span>

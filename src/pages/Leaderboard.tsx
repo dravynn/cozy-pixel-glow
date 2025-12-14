@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProgressBar } from "@/components/ProgressBar";
 import { 
   ArrowLeft, 
   Trophy, 
@@ -51,7 +52,29 @@ const Leaderboard = () => {
         .from("activity_log")
         .select("user_id, points_earned, created_at");
 
-      if (activityError) throw activityError;
+      if (activityError) {
+        // Check if table doesn't exist
+        const errorMessage = activityError.message || '';
+        const isTableMissing = activityError.code === 'PGRST116' || 
+                              errorMessage.includes('relation') || 
+                              errorMessage.includes('does not exist') ||
+                              errorMessage.includes('schema cache') ||
+                              activityError.code === '42P01';
+        
+        if (isTableMissing) {
+          console.warn('activity_log table not found - showing empty leaderboard');
+          setLeaderboardData([]);
+          setIsLoading(false);
+          toast({
+            title: "Database Migration Required",
+            description: "Please run the database migration first. Check supabase/migrations/20250113000000_core_features.sql",
+            variant: "destructive",
+          });
+          return;
+        } else {
+          throw activityError;
+        }
+      }
 
       // Filter by timeframe if needed
       let filteredActivity = activityData || [];
@@ -420,14 +443,7 @@ const Leaderboard = () => {
                           const pointsNeeded = nextEntry.points - userRank.points;
                           const totalRange = nextEntry.points - (leaderboardData.find(e => e.rank === userRank.rank + 1)?.points || 0);
                           const progress = totalRange > 0 ? ((totalRange - pointsNeeded) / totalRange) * 100 : 0;
-                          return (
-                            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-gradient-to-r from-primary to-secondary rounded-full" 
-                                style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} 
-                              />
-                            </div>
-                          );
+                          return <ProgressBar progress={progress} />;
                         }
                         return null;
                       })()}

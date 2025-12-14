@@ -85,14 +85,30 @@ const Dashboard = () => {
     setIsLoading(true);
     try {
       // Fetch total points from activity log
+      let totalPoints = 0;
       const { data: activityData, error: activityError } = await supabase
         .from('activity_log')
         .select('points_earned')
         .eq('user_id', user.id);
 
-      if (activityError) throw activityError;
-
-      const totalPoints = activityData?.reduce((sum, activity) => sum + (activity.points_earned || 0), 0) || 0;
+      if (activityError) {
+        // Check if table doesn't exist
+        const errorMessage = activityError.message || '';
+        const isTableMissing = activityError.code === 'PGRST116' || 
+                              errorMessage.includes('relation') || 
+                              errorMessage.includes('does not exist') ||
+                              errorMessage.includes('schema cache') ||
+                              activityError.code === '42P01';
+        
+        if (isTableMissing) {
+          console.warn('activity_log table not found - using default value of 0 points');
+          // Continue with default value
+        } else {
+          throw activityError;
+        }
+      } else {
+        totalPoints = activityData?.reduce((sum, activity) => sum + (activity.points_earned || 0), 0) || 0;
+      }
 
       // Fetch tips given
       const { data: tipsData, error: tipsError } = await supabase
@@ -174,6 +190,7 @@ const Dashboard = () => {
       const rank = 0; // Placeholder - would need a proper ranking query
 
       // Fetch recent activity
+      let formattedActivity: RecentActivity[] = [];
       const { data: recentActivityData, error: recentActivityError } = await supabase
         .from('activity_log')
         .select('*')
@@ -181,15 +198,30 @@ const Dashboard = () => {
         .order('created_at', { ascending: false })
         .limit(5);
 
-      if (recentActivityError) throw recentActivityError;
-
-      const formattedActivity: RecentActivity[] = (recentActivityData || []).map(activity => ({
-        id: activity.id,
-        description: activity.description || activity.activity_type,
-        points: activity.points_earned,
-        created_at: activity.created_at,
-        activity_type: activity.activity_type
-      }));
+      if (recentActivityError) {
+        // Check if table doesn't exist
+        const errorMessage = recentActivityError.message || '';
+        const isTableMissing = recentActivityError.code === 'PGRST116' || 
+                              errorMessage.includes('relation') || 
+                              errorMessage.includes('does not exist') ||
+                              errorMessage.includes('schema cache') ||
+                              recentActivityError.code === '42P01';
+        
+        if (isTableMissing) {
+          console.warn('activity_log table not found - using empty activity list');
+          // Continue with empty array
+        } else {
+          throw recentActivityError;
+        }
+      } else {
+        formattedActivity = (recentActivityData || []).map(activity => ({
+          id: activity.id,
+          description: activity.description || activity.activity_type,
+          points: activity.points_earned,
+          created_at: activity.created_at,
+          activity_type: activity.activity_type
+        }));
+      }
 
       setStats({
         kindnessPoints: totalPoints,
@@ -211,13 +243,14 @@ const Dashboard = () => {
       const isTableMissing = error.code === 'PGRST116' || 
                             errorMessage.includes('relation') || 
                             errorMessage.includes('does not exist') ||
+                            errorMessage.includes('schema cache') ||
                             errorMessage.includes('404') ||
                             error.code === '42P01';
       
       if (isTableMissing) {
         toast({
           title: "Database Migration Required",
-          description: "Please run the database migration in Supabase. Go to SQL Editor and run: supabase/migrations/20250113000000_core_features.sql",
+          description: "The activity_log table is missing. Please run the migration: supabase/migrations/20250113000000_core_features.sql in your Supabase SQL Editor.",
           variant: "destructive",
         });
       } else {
