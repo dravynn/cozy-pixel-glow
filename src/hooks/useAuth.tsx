@@ -40,7 +40,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signUp = async (email: string, password: string, displayName?: string) => {
-    const redirectUrl = `${window.location.origin}/`;
+    // Use environment variable for production URL, fallback to current origin
+    const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin;
+    const redirectUrl = `${siteUrl}/`;
     
     const { error } = await supabase.auth.signUp({
       email,
@@ -77,11 +79,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const resendConfirmationEmail = async (email: string) => {
     try {
+      // Use environment variable for production URL, fallback to current origin
+      const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin;
+      const redirectUrl = `${siteUrl}/`;
+      
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email: email,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          emailRedirectTo: redirectUrl,
         },
       });
       if (error) {
